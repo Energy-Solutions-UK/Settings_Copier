@@ -1,0 +1,48 @@
+#!/bin/bash
+
+if [ -d /media/* ]; then
+    FOLDER=$(ls -d /media/*)
+    # create 2 variables, one for wifi mac address and one for ethernet mac address with the colons removed
+    WIFI_MAC=$(cat /sys/class/net/wifi0/address | tr -d :)
+    ETH_MAC=$(cat /sys/class/net/eth0/address | tr -d :)
+    if [ -f $FOLDER/settings.xml.import ]; then
+        cp $FOLDER/settings.xml.import /data/conf/settings.xml.import
+        rm -r /data/var/lib/connman/*
+        cp -r $FOLDER/NetworkSettings/* /data/var/lib/connman/
+        for f in /data/var/lib/connman/*; do
+            if [[ $f == *"wifiMacPlaceholder"* ]]; then
+                mv $f ${f/wifiMacPlaceholder/$WIFI_MAC}
+                sed -i "s/wifiMacPlaceholder/$WIFI_MAC/g" ${f/wifiMacPlaceholder/$WIFI_MAC}/settings
+            fi
+            if [[ $f == *"ethMacPlaceholder"* ]]; then
+                mv $f ${f/ethMacPlaceholder/$ETH_MAC}
+                sed -i "s/ethMacPlaceholder/$ETH_MAC/g" ${f/ethMacPlaceholder/$ETH_MAC}/settings
+            fi
+        done
+    fi
+    if [ ! -f $FOLDER/settings.xml.import ]; then
+        cp /data/conf/settings.xml $FOLDER/settings.xml.import
+        mkdir $FOLDER/NetworkSettings
+        cp -r /data/var/lib/connman/* $FOLDER/NetworkSettings/
+        for f in $FOLDER/NetworkSettings/*; do
+            if [[ $f == *$WIFI_MAC* ]]; then
+                mv $f ${f/$WIFI_MAC/wifiMacPlaceholder} 
+                sed -i "s/$WIFI_MAC/wifiMacPlaceholder/g" ${f/$WIFI_MAC/wifiMacPlaceholder}/settings
+            fi
+            if [[ $f == *$ETH_MAC* ]]; then
+                mv $f ${f/$ETH_MAC/ethMacPlaceholder}
+                sed -i "s/$ETH_MAC/ethMacPlaceholder/g" ${f/$ETH_MAC/ethMacPlaceholder}/settings
+            fi
+        done
+    fi
+fi
+
+rm /data/rcS.local
+
+python - << EOF
+import os
+import fcntl
+console_fd = os.open("/dev/tty0",os.O_RDONLY | os.O_NOCTTY)
+fcntl.ioctl(console_fd, 0x4B2F, 10000)
+EOF
+
